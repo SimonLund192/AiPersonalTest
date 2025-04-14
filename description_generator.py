@@ -134,6 +134,67 @@ class SEOScorer:
             'detailed_scores': {k: round(v * 100, 2) for k, v in scores.items()}
         }
 
+def improve_description(product, initial_description, keywords, scorer, all_descriptions, 
+                      max_iterations=3, min_improvement=0.5):
+    """
+    Iteratively improve the product description until the SEO score stabilizes or
+    improvement is below a set threshold.
+    
+    :param product: A dictionary with product details.
+    :param initial_description: The first generated description.
+    :param keywords: List of keywords to include.
+    :param scorer: An instance of SEOScorer.
+    :param all_descriptions: List of other descriptions for uniqueness evaluation.
+    :param max_iterations: Maximum number of improvement iterations.
+    :param min_improvement: Minimum score improvement (in percentage points) to continue refining.
+    :return: The improved description.
+    """
+    best_description = initial_description
+    score_data = scorer.score_description(best_description, keywords, all_descriptions)
+    best_score = score_data['overall_score']
+    print(f"Initial SEO Score: {best_score}")
+    
+    iteration = 0
+    while iteration < max_iterations:
+        iteration += 1
+        
+        # Construct feedback prompt using current description and score
+        feedback_prompt = f"""
+        The following product description currently has an SEO score of {best_score}/100.
+        Identify its main shortcomings in keyword usage, readability, length, structure, and uniqueness.
+        Then, produce an improved version addressing these issues.
+        Make sure the description:
+         - Remains between 100-150 words.
+         - Includes the keywords: {', '.join(keywords)}.
+         - Clearly describes the product using the provided details.
+        
+        Product Name: {product['Product Name']}
+        Product Features: {product['Product Features']}
+        Target Audience: {product['Target Audience']}
+        
+        Only provide the updated product description.
+        """
+        print(f"Improvement Iteration {iteration}: Generating improved description...")
+        response = ollama.generate(model="llama3", prompt=feedback_prompt)
+        new_description = response['response'].strip()
+        new_score_data = scorer.score_description(new_description, keywords, all_descriptions)
+        new_score = new_score_data['overall_score']
+        
+        print(f"Iteration {iteration} SEO Score: {new_score}")
+
+        # Check if the improvement is significant
+        improvement = new_score - best_score
+        if improvement < min_improvement:
+            print("Improvement below threshold; stopping iterative refinement.")
+            break
+        else:
+            best_description = new_description
+            best_score = new_score
+            # Optionally update the 'all_descriptions' list if uniqueness is critical
+            all_descriptions.append(new_description)
+    
+    return best_description
+
 def load_extracted_keywords():
     """Load the extracted keywords data"""
     try:
@@ -236,15 +297,28 @@ def main():
                 print("No matching keywords found, using product features as keywords")
                 keywords = product['Product Features'].split(', ')
             
-            # Generate description
-            description = generate_description(product, keywords)
-            if not description:
+            # Generate initial description
+            initial_description = generate_description(product, keywords)
+            if not initial_description:
                 print("Failed to generate description, skipping...")
                 continue
             
-            # Calculate SEO score
+            # Get all other descriptions for uniqueness comparison
             all_descriptions = [d['generated_description'] for d in results]
-            seo_score = scorer.score_description(description, keywords, all_descriptions)
+            
+            # Improve the description iteratively
+            final_description = improve_description(
+                product,
+                initial_description,
+                keywords,
+                scorer,
+                all_descriptions,
+                max_iterations=3,
+                min_improvement=0.5
+            )
+            
+            # Calculate final SEO score
+            final_score = scorer.score_description(final_description, keywords, all_descriptions)
             
             # Store results
             result = {
@@ -252,16 +326,16 @@ def main():
                 'features': product['Product Features'],
                 'target_audience': product['Target Audience'],
                 'used_keywords': keywords,
-                'generated_description': description,
-                'seo_score': seo_score['overall_score'],
-                'detailed_seo_scores': seo_score['detailed_scores']
+                'generated_description': final_description,
+                'seo_score': final_score['overall_score'],
+                'detailed_seo_scores': final_score['detailed_scores']
             }
             results.append(result)
             
             # Print SEO score for this description
-            print(f"SEO Score: {seo_score['overall_score']}/100")
+            print(f"Final SEO Score: {final_score['overall_score']}/100")
             print("Detailed Scores:")
-            for metric, score in seo_score['detailed_scores'].items():
+            for metric, score in final_score['detailed_scores'].items():
                 print(f"  {metric}: {score}/100")
             print()
             
