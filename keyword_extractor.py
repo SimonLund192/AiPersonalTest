@@ -6,6 +6,7 @@ from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
+import os
 
 # Download required NLTK data
 nltk.download('punkt')
@@ -91,10 +92,18 @@ def main():
     """
     print("Starting keyword extraction process...")
     
+    # Define file paths
+    mock_data_dir = 'MockData'
+    extracted_data_dir = 'ExtractedData'
+    
+    # Ensure directories exist
+    os.makedirs(mock_data_dir, exist_ok=True)
+    os.makedirs(extracted_data_dir, exist_ok=True)
+    
     # Load JSON files
     print("Loading JSON files...")
-    products = load_json_data('product.json')
-    categories = load_json_data('categories.json')
+    products = load_json_data(os.path.join(mock_data_dir, 'product.json'))
+    categories = load_json_data(os.path.join(mock_data_dir, 'categories.json'))
     
     if not products:
         print("No product data found. Exiting...")
@@ -136,7 +145,7 @@ def main():
             continue
     
     # Save results
-    output_file = 'extracted_keywords.json'
+    output_file = os.path.join(extracted_data_dir, 'extracted_keywords.json')
     print(f"Saving results to {output_file}...")
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
@@ -144,4 +153,4 @@ def main():
     print(f"Process completed successfully! Processed {len(results)} products.")
 
 if __name__ == "__main__":
-    main() 
+    main()
