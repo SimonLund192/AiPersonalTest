@@ -344,7 +344,7 @@ def main():
             continue
     
     # Save results
-    output_file = os.path.join('ExtractedData', 'generated_descriptions.json')
+    output_file = os.path.join('GeneratedDescriptions', 'generated_descriptions.json')
     print(f"Saving results to {output_file}...")
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
