@@ -80,6 +80,7 @@ def improve_description(product, initial_description, keywords, scorer, all_desc
             # Optionally update the 'all_descriptions' list if uniqueness is critical
             all_descriptions.append(new_description)
     
+    print(f"Final SEO Score after refinements. {best_score}")
     return best_description
 
 def load_extracted_keywords():
