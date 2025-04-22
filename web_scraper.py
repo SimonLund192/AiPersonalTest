@@ -1,17 +1,14 @@
 import json  # ensure JSON is available before any use
 import os
 import requests
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    raise ImportError("BeautifulSoup4 is required. Install it with: pip install beautifulsoup4")
+from bs4 import BeautifulSoup
 
 from seo_scorer import SEOScorer
 
 class WebScraper:
     """
     A simple web scraper to fetch product descriptions from competitor pages and score them using SEOScorer.
+    Exclusing the keyword metric.
     """
     def __init__(self, headers=None, timeout=10):
         self.headers = headers or {"User-Agent": "Mozilla/5.0 (compatible)"}
@@ -29,14 +26,35 @@ class WebScraper:
         return element.get_text(separator=" ", strip=True) if element else ""
 
     def scrape_and_score(self, url, selector, keywords=None, all_descriptions=None):
+        """
+        Fetches the HTML, extracts the text via the CSS selector, then scores readability,
+        length, structure and uniqueness - bt not keyword usage.
+        """
         html = self.fetch(url)
         description = self.extract_description(html, selector)
+
         if not description:
             return {"url": url, "description": "", "score_data": None}
-        score_data = self.scorer.score_description(description, keywords or [], all_descriptions or [])
-        return {"url": url, "description": description, "score_data": score_data}
+        
+        # Pass an empty keyword list so calculate_keyword_score() = 0
+        score_data = self.scorer.score_description(
+            text=description, 
+            keywords=[], 
+            all_descriptions=all_descriptions or []
+            )
+        
+        # Remove the keyword_score entry from the detailed breakdown
+        score_data["detailed_scores"].pop("keyword_score", None)
+
+        return {
+            "url": url, 
+            "description": description, 
+            "score_data": score_data}
 
     def batch_scrape(self, url_selector_list, keywords=None, all_descriptions=None):
+        """
+        url_selector_list: list of (url, css_selector) tuples
+        """
         results = []
         for url, selector in url_selector_list:
             try:
