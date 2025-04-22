@@ -30,22 +30,39 @@ class WebScraper:
         return soup.get_text(separator=" ", strip=True)
 
     def scrape_and_score(self, url, all_descriptions=None):
+        """
+        Fetches the HTML, extracts the main content block via readability,
+        then scores readability, length, structure, and uniqueness—but not keywords.
+        Returns both raw and adjusted overall scores.
+        """
         html = self.fetch(url)
         description = self.extract_description(html)
 
         if not description:
             return {"url": url, "description": "", "score_data": None}
 
-        # Score without keyword usage
+        # Score without keyword usage (Keyword score still impacts the overall score)
         score_data = self.scorer.score_description(
             text=description,
             keywords=[],  # disable keyword metric
             all_descriptions=all_descriptions or []
         )
+
+        # Normalize out the keyword weight so the other metrics fill to 100%
+        kw_weight = self.scorer.keyword_weight
+        if (1 - kw_weight) > 0:
+            adjusted = round(score_data["overall_score"] / (1 - kw_weight), 2)
+        else:
+            adjusted = score_data["overall_score"]
+        score_data["adjusted_overall_score"] = adjusted
+
         # Remove keyword score from details
         score_data["detailed_scores"].pop("keyword_score", None)
 
-        return {"url": url, "description": description, "score_data": score_data}
+        return {
+            "url": url, 
+            "description": description, 
+            "score_data": score_data}
 
 if __name__ == "__main__":
     url = input("Enter the product page URL to scrape: ").strip()
