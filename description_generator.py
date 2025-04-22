@@ -1,10 +1,26 @@
 import json
 import os
-import ollama
+import openai
+from dotenv import load_dotenv
 import pandas as pd
 from textstat import textstat
 import numpy as np
 from seo_scorer import SEOScorer
+
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+def call_gpt4o(prompt: str, model: str = "gpt-4o-mini", temperature: float = 0.7, max_tokens: int = 300) -> str:
+    """
+    Wrapper around OpenAI ChatCompletion for gpt-4o-mini
+    """
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+    return response.choices[0].message.content.strip()
 
 def improve_description(product, initial_description, keywords, scorer, all_descriptions, 
                       max_iterations=3, min_improvement=0.5):
@@ -47,8 +63,7 @@ def improve_description(product, initial_description, keywords, scorer, all_desc
         Only provide the updated product description.
         """
         print(f"Improvement Iteration {iteration}: Generating improved description...")
-        response = ollama.generate(model="llama3", prompt=feedback_prompt)
-        new_description = response['response'].strip()
+        new_description = call_gpt4o(feedback_prompt)
         new_score_data = scorer.score_description(new_description, keywords, all_descriptions)
         new_score = new_score_data['overall_score']
         
@@ -107,8 +122,8 @@ def find_matching_keywords(product_name, extracted_data):
             return item['keywords'][:5]  # Return top 5 keywords
     return []
 
-def generate_description(product, keywords, model="llama3"):
-    """Generate SEO-friendly description using LLM"""
+def generate_description(product, keywords, model="gpt-4o-mini"):
+    """Generate SEO-friendly description using GPT-4o-mini"""
     try:
         # Prepare the prompt
         prompt = f"""
@@ -128,9 +143,7 @@ def generate_description(product, keywords, model="llama3"):
         print(f"Generating description for: {product['Product Name']}")
         print(f"Using keywords: {keywords}")
         
-        # Generate description using Ollama
-        response = ollama.generate(model=model, prompt=prompt)
-        description = response['response'].strip()
+        description = call_gpt4o(prompt, model=model)
         
         print(f"Generated description length: {len(description.split())} words")
         return description
