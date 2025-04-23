@@ -11,3 +11,5 @@ python-dotenv==1.0.0
 beautifulsoup4==4.12.2
 openai==0.27.8
 readability-lxml==0.8.1
+spacy>=3.0,<4.0
+rake-nltk>=1.0.4
