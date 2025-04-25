@@ -22,7 +22,7 @@ def process_product_description(product_data):
         extracted_keywords = load_extracted_keywords()
         
         # Find matching keywords
-        keywords = find_matching_keywords(product_data['Product Name'], extracted_keywords)
+        keywords = find_matching_keywords(product_data, extracted_keywords)
         if not keywords and 'Product Features' in product_data:
             keywords = product_data['Product Features'].split(', ')
         

@@ -112,15 +112,25 @@ def load_products():
         print(f"Error loading products: {str(e)}")
         return None
 
-def find_matching_keywords(product_name, extracted_data):
-    """Find matching keywords from extracted data"""
-    # If no extracted data, use product features as keywords
-    if not extracted_data:
-        return []
-        
+def find_matching_keywords(product_data, extracted_data):
+    """
+    Find matching keywords from extracted_data by product_id or name fallback.
+    :param product_data: dict, the product info (must include either 'product_id' or 'Product Name')
+    :param extracted_data: list of dicts loaded from ExtractedData/extracted_keywords.json
+    :return: list of up to 5 keywords
+    """
+    # 1) Try matching by product_id
+    pid = product_data.get('product_id')
+    if pid:
+        for item in extracted_data:
+            if item.get('product_id') == pid:
+                return item.get('keywords', [])[:5]
+    # 2) Fallback: match by name if present
+    name = product_data.get('Product Name', '').lower()
     for item in extracted_data:
-        if item['name'].lower() == product_name.lower():
-            return item['keywords'][:5]  # Return top 5 keywords
+        if item.get('name', '').lower() == name:
+            return item.get('keywords', [])[:5]
+    # 3) No match → return empty so features get used
     return []
 
 def generate_description(product, keywords, model="gpt-4o-mini"):
