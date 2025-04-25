@@ -80,9 +80,21 @@ if __name__ == "__main__":
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, 'scraped_description.json')
 
-        # Save scraped result
+        # Load existing results (if any)
+        try:
+            with open(output_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    data = [data]
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = []
+
+        # Append the new scrape
+        data.append(result)
+
+        # Save all results back out
         with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
         print(f"Scraped data saved to {output_file}")
         if result["score_data"]:

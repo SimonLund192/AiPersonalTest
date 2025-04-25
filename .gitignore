@@ -7,9 +7,6 @@
 # VS Code config
 .vscode/
 
-# Local-only project data
-MockData/
-
 # Python cache
 __pycache__/
 *.py[cod]
