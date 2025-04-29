@@ -56,26 +56,26 @@ def improve_description(product, initial_description, keywords, scorer, all_desc
 
         # Build focused improvement prompt
         feedback_prompt = f"""
-We are improving the following product description, which currently scores {best_score}/100 on SEO.
-Its weakest area is **{weakest_metric}**, scoring only {weakest_score}/100.
+        We are improving the following product description, which currently scores {best_score}/100 on SEO.
+        Its weakest area is **{weakest_metric}**, scoring only {weakest_score}/100.
 
-Revise the description to specifically improve {weakest_metric}.
-Keep structure, tone, and strong parts intact. Do not completely rewrite unless necessary.
+        Revise the description to specifically improve {weakest_metric}.
+        Keep structure, tone, and strong parts intact. Do not completely rewrite unless necessary.
 
-Requirements:
-- Maintain 100-150 words.
-- Use the keywords: {', '.join(keywords)}.
-- Stay accurate to the product's details.
+        Requirements:
+        - Maintain 100-150 words.
+        - Use the keywords: {', '.join(keywords)}.
+        - Stay accurate to the product's details.
 
-Product Name: {product['Product Name']}
-Product Features: {product['Product Features']}
-Target Audience: {product['Target Audience']}
+        Product Name: {product['Product Name']}
+        Product Features: {product['Product Features']}
+        Target Audience: {product['Target Audience']}
 
-Current Description:
-\"\"\"{best_description}\"\"\"
+        Current Description:
+        \"\"\"{best_description}\"\"\"
 
-New improved version (only the description, no extra comments):
-"""
+        New improved version (only the description, no extra comments):
+        """
 
         logger.warning(f"[Iteration {iteration}] Generating improved description...")
 
