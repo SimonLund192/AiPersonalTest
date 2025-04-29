@@ -14,26 +14,24 @@ class SEOScorer:
         self.uniqueness_weight = 0.15
 
     def calculate_keyword_score(self, text, keywords):
-        """Calculate score based on keyword usage and density"""
+        """Improved: Check if full keyword phrases appear in the text (case-insensitive)"""
         if not keywords:
             return 0.0
-            
-        text_words = text.lower().split()
-        keyword_count = sum(1 for word in text_words if word in [k.lower() for k in keywords])
-        
-        # Calculate keyword density (should be between 1-3%)
-        density = (keyword_count / len(text_words)) * 100 if text_words else 0
+
+        text_clean = re.sub(r'[^a-z0-9 ]', ' ', text.lower())  # remove punctuation
+        text_clean = re.sub(r'\s+', ' ', text_clean)  # normalize whitespace
+
+        keyword_matches = 0
+        for kw in keywords:
+            kw_clean = re.sub(r'[^a-z0-9 ]', ' ', kw.lower())
+            kw_clean = re.sub(r'\s+', ' ', kw_clean).strip()
+            if kw_clean in text_clean:
+                keyword_matches += 1
+
+        density = (keyword_matches / len(text_clean.split())) * 100 if text_clean else 0
         density_score = max(0, min(1, 1 - abs(density - 2) / 2))  # Peak at 2% density
-        
-        # Score for keyword distribution
-        positions = [i for i, word in enumerate(text_words) if word in [k.lower() for k in keywords]]
-        if positions:
-            distribution = np.std(positions) / len(text_words)
-            distribution_score = max(0, min(1, 1 - distribution))
-        else:
-            distribution_score = 0
-            
-        return (density_score + distribution_score) / 2
+
+        return density_score
 
     def calculate_readability_score(self, text):
         """Calculate score based on readability metrics"""

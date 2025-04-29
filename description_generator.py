@@ -6,9 +6,12 @@ import pandas as pd
 from textstat import textstat
 import numpy as np
 from seo_scorer import SEOScorer
+import logging
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 def call_gpt4o(prompt: str, model: str = "gpt-4o-mini", temperature: float = 0.7, max_tokens: int = 300) -> str:
     """
@@ -23,10 +26,9 @@ def call_gpt4o(prompt: str, model: str = "gpt-4o-mini", temperature: float = 0.7
     return response.choices[0].message.content.strip()
 
 def improve_description(product, initial_description, keywords, scorer, all_descriptions, 
-                      max_iterations=3, min_improvement=0.5):
+                         max_iterations=3, min_improvement=0.5):
     """
-    Iteratively improve the product description until the SEO score stabilizes or
-    improvement is below a set threshold.
+    Iteratively improve the product description, focusing on the weakest SEO metric each time.
     
     :param product: A dictionary with product details.
     :param initial_description: The first generated description.
@@ -40,47 +42,79 @@ def improve_description(product, initial_description, keywords, scorer, all_desc
     best_description = initial_description
     score_data = scorer.score_description(best_description, keywords, all_descriptions)
     best_score = score_data['overall_score']
-    print(f"Initial SEO Score: {best_score}")
-    
+    logger.warning(f"Initial SEO Score: {best_score}")
+
     iteration = 0
     while iteration < max_iterations:
         iteration += 1
-        
-        # Construct feedback prompt using current description and score
+
+        # Find weakest metric
+        weakest_metric = min(score_data['detailed_scores'], key=score_data['detailed_scores'].get)
+        weakest_score = score_data['detailed_scores'][weakest_metric]
+
+        logger.warning(f"[Iteration {iteration}] Targeting weakest metric: {weakest_metric} ({weakest_score}/100)")
+
+        # Build focused improvement prompt
         feedback_prompt = f"""
-        The following product description currently has an SEO score of {best_score}/100.
-        Identify its main shortcomings in keyword usage, readability, length, structure, and uniqueness.
-        Then, produce an improved version addressing these issues.
-        Make sure the description:
-         - Remains between 100-150 words.
-         - Includes the keywords: {', '.join(keywords)}.
-         - Clearly describes the product using the provided details.
-        
-        Product Name: {product['Product Name']}
-        Product Features: {product['Product Features']}
-        Target Audience: {product['Target Audience']}
-        
-        Only provide the updated product description.
-        """
-        print(f"Improvement Iteration {iteration}: Generating improved description...")
+We are improving the following product description, which currently scores {best_score}/100 on SEO.
+Its weakest area is **{weakest_metric}**, scoring only {weakest_score}/100.
+
+Revise the description to specifically improve {weakest_metric}.
+Keep structure, tone, and strong parts intact. Do not completely rewrite unless necessary.
+
+Requirements:
+- Maintain 100-150 words.
+- Use the keywords: {', '.join(keywords)}.
+- Stay accurate to the product's details.
+
+Product Name: {product['Product Name']}
+Product Features: {product['Product Features']}
+Target Audience: {product['Target Audience']}
+
+Current Description:
+\"\"\"{best_description}\"\"\"
+
+New improved version (only the description, no extra comments):
+"""
+
+        logger.warning(f"[Iteration {iteration}] Generating improved description...")
+
+        # Generate improved version
         new_description = call_gpt4o(feedback_prompt)
+
+        # Score new version
         new_score_data = scorer.score_description(new_description, keywords, all_descriptions)
         new_score = new_score_data['overall_score']
-        
-        print(f"Iteration {iteration} SEO Score: {new_score}")
 
-        # Check if the improvement is significant
+        # After improvement: show metrics
+        new_weakest_metric = min(new_score_data['detailed_scores'], key=new_score_data['detailed_scores'].get)
+        new_weakest_score = new_score_data['detailed_scores'][new_weakest_metric]
+
+        logger.warning(f"[Iteration {iteration}] New overall SEO Score: {new_score}")
+        logger.warning(f"[Iteration {iteration}] After improvement: new weakest metric is {new_weakest_metric} ({new_weakest_score}/100)")
+
+        if new_score_data['detailed_scores'][weakest_metric] > score_data['detailed_scores'][weakest_metric]:
+            logger.warning(f"[Iteration {iteration}] ✅ Targeted metric '{weakest_metric}' improved from {weakest_score} to {new_score_data['detailed_scores'][weakest_metric]}")
+        else:
+            logger.warning(f"[Iteration {iteration}] ❌ Targeted metric '{weakest_metric}' did NOT improve (still {new_score_data['detailed_scores'][weakest_metric]})")
+
+        # Compare overall improvement
         improvement = new_score - best_score
         if improvement < min_improvement:
-            print("Improvement below threshold; stopping iterative refinement.")
+            logger.warning(f"[Iteration {iteration}] Improvement below threshold; stopping iterative refinement.")
             break
         else:
             best_description = new_description
             best_score = new_score
-            # Optionally update the 'all_descriptions' list if uniqueness is critical
+            score_data = new_score_data
             all_descriptions.append(new_description)
-    
-    print(f"Final SEO Score after refinements. {best_score}")
+
+        # Optional: Early stop if all metrics are >80
+        if all(v >= 80 for v in new_score_data['detailed_scores'].values()):
+            logger.warning(f"[Iteration {iteration}] 🚀 All metrics above 80 — stopping early.")
+            break
+
+    logger.warning(f"Final SEO Score after refinements: {best_score}")
     return best_description
 
 def load_extracted_keywords():
@@ -162,98 +196,23 @@ def generate_description(product, keywords, model="gpt-4o-mini"):
         print(f"Error generating description: {str(e)}")
         return ""
 
-def main():
-    print("Starting description generation process...")
-    
-    # Load data
-    print("Loading data...")
-    products_df = load_products()
-    extracted_keywords = load_extracted_keywords()
-    
-    if products_df is None or products_df.empty:
-        print("No products found. Exiting...")
-        return
-        
-    print(f"Loaded {len(products_df)} products")
-    
-    # Initialize SEO scorer
-    scorer = SEOScorer()
-    
-    # Generate descriptions
-    results = []
-    print("Generating descriptions...")
-    
-    for index, product in products_df.iterrows():
-        print(f"\nProcessing product {index + 1}/{len(products_df)}: {product['Product Name']}")
-            
-        try:
-            # Find matching keywords from extracted data
-            keywords = find_matching_keywords(product['Product Name'], extracted_keywords)
-            if not keywords:
-                print("No matching keywords found, using product features as keywords")
-                keywords = product['Product Features'].split(', ')
-            
-            # Generate initial description
-            initial_description = generate_description(product, keywords)
-            if not initial_description:
-                print("Failed to generate description, skipping...")
-                continue
-            
-            # Get all other descriptions for uniqueness comparison
-            all_descriptions = [d['generated_description'] for d in results]
-            
-            # Improve the description iteratively
-            final_description = improve_description(
-                product,
-                initial_description,
-                keywords,
-                scorer,
-                all_descriptions,
-                max_iterations=3,
-                min_improvement=0.5
-            )
-            
-            # Calculate final SEO score
-            final_score = scorer.score_description(final_description, keywords, all_descriptions)
-            
-            # Store results
-            result = {
-                'product_name': product['Product Name'],
-                'features': product['Product Features'],
-                'target_audience': product['Target Audience'],
-                'used_keywords': keywords,
-                'generated_description': final_description,
-                'seo_score': final_score['overall_score'],
-                'detailed_seo_scores': final_score['detailed_scores']
-            }
-            results.append(result)
-            
-            # Print SEO score for this description
-            print(f"Final SEO Score: {final_score['overall_score']}/100")
-            print("Detailed Scores:")
-            for metric, score in final_score['detailed_scores'].items():
-                print(f"  {metric}: {score}/100")
-            print()
-            
-        except Exception as e:
-            print(f"Error processing product {index + 1}: {str(e)}")
-            continue
-    
-    # Save results
-    output_file = os.path.join('GeneratedDescriptions', 'generated_descriptions.json')
-    print(f"Saving results to {output_file}...")
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
-    
-    # Print summary
-    if results:
-        avg_score = sum(r['seo_score'] for r in results) / len(results)
-        print(f"\nSEO Scoring Summary:")
-        print(f"Average Score: {avg_score:.2f}/100")
-        print(f"Highest Score: {max(r['seo_score'] for r in results):.2f}/100")
-        print(f"Lowest Score: {min(r['seo_score'] for r in results):.2f}/100")
-    else:
-        print("\nNo descriptions were generated successfully.")
+def generate_keywords(product, model="gpt-4o-mini"):
+    """Generate 5 SEO keywords for a product"""
+    try:
+        prompt = f"""
+        Based on the following product information, generate 5 SEO-friendly keywords or keyphrases.
+        They should be short (1-3 words) and very relevant to the product and what people might search for.
 
-if __name__ == "__main__":
-    main() 
+        Product Name: {product['Product Name']}
+        Product Features: {product['Product Features']}
+        Target Audience: {product['Target Audience']}
+
+        List them as a comma-separated list (no numbering or explanations).
+        """
+        keywords_text = call_gpt4o(prompt, model=model)
+        keywords = [k.strip() for k in keywords_text.split(',') if k.strip()]
+        print(f"Generated fallback keywords: {keywords}")
+        return keywords[:5]
+    except Exception as e:
+        print(f"Error generating fallback keywords: {str(e)}")
+        return []

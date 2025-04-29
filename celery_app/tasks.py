@@ -23,8 +23,14 @@ def process_product_description(product_data):
         
         # Find matching keywords
         keywords = find_matching_keywords(product_data, extracted_keywords)
-        if not keywords and 'Product Features' in product_data:
-            keywords = product_data['Product Features'].split(', ')
+        if not keywords:
+            if 'Product Features' in product_data:
+                feature_keywords = product_data['Product Features'].split(', ')
+                if feature_keywords and len(feature_keywords) >= 3:
+                    keywords = feature_keywords[:5]
+                else:
+                    # Features not rich enough? → Generate keywords dynamically
+                    keywords = generate_keywords(product_data)
         
         # Generate initial description
         initial_description = generate_description(product_data, keywords)
@@ -41,20 +47,39 @@ def process_product_description(product_data):
                 existing_data = json.load(f)
                 all_descriptions = [d['generated_description'] for d in existing_data]
         
-        # Improve the description
+         # ---- A/B Testing: Generate 2 Descriptions ----
+        desc_a = generate_description(product_data, keywords)
+        desc_b = generate_description(product_data, keywords)
+
+        # Score both
+        score_a = scorer.score_description(desc_a, keywords, all_descriptions)
+        score_b = scorer.score_description(desc_b, keywords, all_descriptions)
+
+        # Select best
+        if score_a['overall_score'] >= score_b['overall_score']:
+            selected_desc = desc_a
+            selected_score = score_a
+            selected_version = 'A'
+        else:
+            selected_desc = desc_b
+            selected_score = score_b
+            selected_version = 'B'
+
+        # Improve selected description
         final_description = improve_description(
             product_data,
-            initial_description,
+            selected_desc,
             keywords,
             scorer,
             all_descriptions,
             max_iterations=3,
             min_improvement=0.5
         )
-        
-        # Calculate final SEO score
+
+        # Final score after improvement
         final_score = scorer.score_description(final_description, keywords, all_descriptions)
-        
+
+        # ---- Return everything useful ----
         return {
             'status': 'success',
             'result': {
@@ -62,11 +87,17 @@ def process_product_description(product_data):
                 'features': product_data.get('Product Features', ''),
                 'target_audience': product_data.get('Target Audience', ''),
                 'used_keywords': keywords,
+                'description_A': desc_a,
+                'score_A': score_a['overall_score'],
+                'description_B': desc_b,
+                'score_B': score_b['overall_score'],
+                'selected_version': selected_version,
                 'generated_description': final_description,
                 'seo_score': final_score['overall_score'],
                 'detailed_seo_scores': final_score['detailed_scores']
             }
         }
+
     except Exception as e:
         return {
             'status': 'error',
